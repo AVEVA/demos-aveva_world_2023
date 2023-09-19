@@ -1,0 +1,104 @@
+from ADHOMFClient import *
+from ChargerDataClient import ChargerDataClient, ChargerData
+from collections import deque
+import json
+import logging
+
+
+# Logging Settings
+level = logging.INFO
+log_file_name = 'logfile.txt'
+
+# Data Sending Settings
+send_period = 30        # maximum time to wait before sending the next OMF data message
+max_events = 17000      # maximum number of events to send per OMF data message
+max_queue_len = 100000
+
+
+def getAppsettings():
+    """Open and parse the appsettings.json file"""
+
+    # Try to open the configuration file
+    try:
+        with open(
+            'appsettings.json',
+            'r',
+        ) as f:
+            appsettings = json.load(f)
+    except Exception as error:
+        logging.ERROR(f'Error: {str(error)}')
+        logging.ERROR(f'Could not open/read appsettings.json')
+        exit()
+
+    return appsettings
+
+
+def send(omf_client: ADHOMFClient, queue: deque):
+    payload = {}
+    for _ in range(max_events):
+        if len(queue) == 0:
+            continue
+
+        event: ChargerData = queue.pop()
+        if event.Id not in payload:
+            payload[event.Id] = [
+                {'Timestamp': event.Timestamp, 'Value': event.Value}]
+        else:
+            payload[event.Id].append(
+                {'Timestamp': event.Timestamp, 'Value': event.Value})
+
+    payload = [{'containerid': id, 'values': values}
+               for id, values in payload.items()]
+
+    response = omf_client.retryWithBackoff(
+        omf_client.omfRequest, 10, OMFMessageType.Data, OMFMessageAction.Create, payload)
+    omf_client.verifySuccessfulResponse(response, 'Error sending data')
+
+
+def main():
+    appsettings = getAppsettings()
+
+    # Create clients
+    omf_client = ADHOMFClient(
+        appsettings.get('Resource'),
+        appsettings.get('ApiVersion'),
+        appsettings.get('TenantId'),
+        appsettings.get('NamespaceId'),
+        appsettings.get('Clients')[0].get('ClientId'),
+        appsettings.get('Clients')[0].get('ClientSecret'),
+        logging_enabled=True
+    )
+
+    charger_data_client = ChargerDataClient()
+
+    # Get or create types in data hub
+    response = omf_client.omfRequest(
+        OMFMessageType.Type, OMFMessageAction.Create, charger_data_client.getTypes())
+    omf_client.verifySuccessfulResponse(response, 'Error creating types')
+
+    # Get or create streams from data source in data hub
+    streams = charger_data_client.getStreams()
+    response = omf_client.omfRequest(
+        OMFMessageType.Container, OMFMessageAction.Create, streams)
+    omf_client.verifySuccessfulResponse(response, 'Error creating containers')
+
+    queue = deque(maxlen=max_queue_len)
+    timer = time.time()
+    while True:
+        for stream in streams:
+            queue.extendleft(charger_data_client.getData(stream.get('id')))
+
+            while len(queue) >= max_events or time.time() - timer > send_period:
+                send(omf_client, queue)
+                timer = time.time()
+
+            time.sleep(1)
+
+
+if __name__ == "__main__":
+
+    # Set up the logger
+    logging.basicConfig(filename=log_file_name, encoding='utf-8', level=level, datefmt='%Y-%m-%d %H:%M:%S',
+                        format='%(asctime)s %(module)16s,line: %(lineno)4d %(levelname)8s | %(message)s')
+
+    main()

@@ -1,0 +1,5 @@
+adh-sample-library-preview>=0.9.13rc0
+pandas>=2.0.3
+plotly-express>-0.4.1
+streamlit>=1.26.0
+streamlit-autorefresh>=1.0.1
