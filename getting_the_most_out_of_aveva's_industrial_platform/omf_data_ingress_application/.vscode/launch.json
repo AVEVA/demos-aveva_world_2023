@@ -28,13 +28,5 @@
             "console": "integratedTerminal",
             "justMyCode": true
         },
-        {
-            "name": "Python: Fastest Data Ingress",
-            "type": "python",
-            "request": "launch",
-            "program": "CarChargerIngress4.py",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        }
     ]
 }

@@ -1,7 +1,6 @@
 from ADHOMFClient import *
 from ChargerDataClient import ChargerDataClient, ChargerData
 from collections import deque
-from concurrent.futures import ProcessPoolExecutor
 import json
 import logging
 from multiprocessing import Process
@@ -112,6 +111,9 @@ def main():
         OMFMessageType.Container, OMFMessageAction.Create, streams)
     omf_client.verifySuccessfulResponse(response, 'Error creating containers')
 
+    # **************************************************************
+    # Split streams into different partitions to improve performance
+    # **************************************************************
     process_partitions = []
     for i in range(0, len(streams), int(len(streams)/max_processes)):
         process_partitions.append(

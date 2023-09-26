@@ -88,6 +88,9 @@ def threadManager(appsettings, thread_partition):
 
 
 def processManager(appsettings, process_partition):
+    # *************************************************************************
+    # Split streams again into different threads to further improve performance
+    # *************************************************************************
     thread_partitions = []
     for i in range(0, len(process_partition), int(len(process_partition)/max_threads_per_process)):
         thread_partitions.append(
@@ -131,6 +134,7 @@ def main():
         OMFMessageType.Container, OMFMessageAction.Create, streams)
     omf_client.verifySuccessfulResponse(response, 'Error creating containers')
 
+    # Split streams into different partitions to improve performance
     process_partitions = []
     for i in range(0, len(streams), int(len(streams)/max_processes)):
         process_partitions.append(
