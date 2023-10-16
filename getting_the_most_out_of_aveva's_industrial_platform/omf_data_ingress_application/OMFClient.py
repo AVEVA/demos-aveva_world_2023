@@ -170,7 +170,7 @@ class OMFClient(object):
         failures = 0
         while not success:
             response = fn(*args, **kwargs)
-            if response.status_code == 504 or response.status_code == 503:
+            if (response.status_code == 504 or response.status_code == 503):
                 if (failures >= 0 and failures >= max_retries):
                     logging.error('Server error. No more retries available.')
                     return response
