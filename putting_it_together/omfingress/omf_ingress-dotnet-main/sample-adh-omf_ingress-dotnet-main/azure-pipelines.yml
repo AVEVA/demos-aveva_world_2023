@@ -1,0 +1,103 @@
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+schedules:
+  - cron: '0 0 * * 0'
+    displayName: Weekly build
+    branches:
+      include:
+        - main
+    always: true
+
+resources:
+  repositories:
+    - repository: OpsGuildAutomationRepo
+      type: git
+      name: Engineering/OpsGuild.Automation
+      ref: refs/heads/main
+    - repository: templates
+      type: github
+      name: osisoft/OSI-Samples
+      endpoint: osisoft/OSI-Samples
+
+variables:
+  - template: '/miscellaneous/build_templates/variables.yml@templates'
+  - name: analysisProject
+    value: OMF_Ing_DotNet
+
+parameters:
+  - name: pool
+    default: 00-OSIManaged-Containers
+  - name: containerDemands
+    type: object
+    default: ['Agent.OS -equals $(agentOS)']
+
+jobs:
+  - job: Tests
+    condition: ne(variables['Build.Reason'], 'Schedule')
+    strategy:
+      maxParallel: 1 # Avoid conflicts in ADH
+      matrix:
+        linux:
+          agentOS: Linux
+        windows:
+          agentOS: Windows_NT
+    pool:
+      name: ${{ parameters.pool }}
+      demands: ${{ parameters.containerDemands }}
+    variables:
+      - name: StreamId
+        value: OmfIngressAutomatedTestingStream
+      - name: ConnectionName
+        value: OmfIngressAutomatedTestingConnection
+    steps:
+      - template: '/miscellaneous/build_templates/appsettings.yml@templates'
+        parameters:
+          secrets: 'TenantId, NamespaceId, ClientId, ClientSecret, DeviceClientId, DeviceClientSecret, Resource'
+
+      - task: UseDotNet@2
+        displayName: 'Install dotnet 6'
+        inputs:
+          packageType: 'sdk'
+          version: '6.x'
+
+      - task: DotNetCoreCLI@2
+        displayName: 'Nuget restore'
+        inputs:
+          command: restore
+
+      - task: DotNetCoreCLI@2
+        displayName: 'Run tests'
+        inputs:
+          command: test
+          publishTestResults: true
+          testRunTitle: '$(Agent.JobName) on $(Agent.OS)'
+
+  - template: '/miscellaneous/build_templates/code-analysis.yml@templates'
+    parameters:
+      buildSteps:
+        - task: UseDotNet@2
+          displayName: 'Install dotnet 6'
+          inputs:
+            packageType: 'sdk'
+            version: '6.x'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Nuget restore'
+          inputs:
+            command: restore
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Build'
+          inputs:
+            command: build
+
+        - template: '/miscellaneous/build_templates/binskim.yml@templates'
